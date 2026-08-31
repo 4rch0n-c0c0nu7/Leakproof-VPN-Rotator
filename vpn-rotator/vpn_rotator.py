@@ -99,7 +99,7 @@ def main():
         return
 
     print("[*] Verifying routing tables and IP address (Waiting 4 seconds)...")
-    time.sleep(4)
+    time.sleep(8)
     new_ip = get_public_ip()
 
     if new_ip == old_ip or new_ip == "Unknown (Offline)":
