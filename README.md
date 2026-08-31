@@ -1,3 +1,5 @@
+<img width="476" height="534" alt="screenshot" src="https://github.com/user-attachments/assets/78b71f2b-a75e-4c7e-92d5-df936184cd42" />
+
 # 🪟 90s Windows-Style VPN Dashboard & Rotator
 
 A lightweight, retro-styled Python control center designed for embedded cyberdecks and Linux field units. It provides a classic Windows-inspired graphical interface to manage your VPN connections, execute automated IP/config rotation, and handle robust network kill-switch recovery on the fly.
