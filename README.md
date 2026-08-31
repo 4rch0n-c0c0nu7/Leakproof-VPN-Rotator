@@ -1,31 +1,22 @@
-<img width="532" height="632" alt="screenshot" src="https://github.com/user-attachments/assets/fb09d4de-31dc-4be4-9a86-b4effcc2794a" />
+# 🪟 90s Windows-Style VPN Dashboard & Rotator
 
+A lightweight, retro-styled Python control center designed for embedded cyberdecks and Linux field units. It provides a classic Windows-inspired graphical interface to manage your VPN connections, execute automated IP/config rotation, and handle robust network kill-switch recovery on the fly.
 
-**LLM Token Vault & Routing HUD**
+## 🚀 Features
 
-An encrypted, lightweight API key manager and multi-provider routing dashboard designed for edge computing, cyberdecks, and local AI projects.
+* **Retro 90s UI Aesthetic:** Classic Windows desktop styling built to run smoothly on small-form-factor screens and custom hardware displays (like 7-inch HDMI displays).
+* **Automated VPN Rotator:** Backend rotation scripts (`vpn_rotator.py`) to cycle through configs and maintain stealth.
+* **Kill-Switch Recovery:** Built-in safeguards and network recovery handlers to ensure your real IP never leaks if a tunnel drops.
+* **NetworkManager Integration:** Seamlessly interfaces with `nmcli` and system network utilities on Raspberry Pi OS.
 
-Created by 4rch0n-c0c0nu7.
+## 🛠️ Components
 
-**The Problem**
+* `vpn_dashboard.py` — The core 90s-styled graphical interface script.
+* `vpn_rotator.py` — The background service handling connection health and configuration rotation.
 
-Most open-source AI projects tell you to paste your highly sensitive API keys into a plaintext .env file. If you are building on portable hardware (like a Raspberry Pi cyberdeck) and your device is lost or stolen, your API keys are compromised instantly. Furthermore, enterprise-grade LLM routers usually require heavy Docker containers, PostgreSQL databases, and Redis caches—which is massive overkill for a local maker project.
+## ⚙️ Quick Start
 
-**The Solution**
-
-This project provides a scalpel instead of a sledgehammer. It features a pure-Python, lightweight Tkinter HUD that routes your prompts across multiple providers (Groq, Gemini, Cerebras, etc.) while keeping your API keys locked inside a hardware-tied AES-256 encrypted vault.
-
-Key Features
-**Hardware-Locked Encryption:** Uses cryptography.fernet and PBKDF2HMAC to encrypt your keys. The decryption key is derived using a salt and your specific system's hardware ID (/etc/machine-id on Linux, falling back to UUID on Mac/Windows). If the keys file is stolen and moved to another computer, it cannot be decrypted.
-* **Live Token Telemetry:** The GUI pings active providers and visualizes your rate limits and available tokens.
-* **Multi-Provider Support:** Seamlessly handles Groq, Google Gemini, OpenRouter, OpenAI, Cerebras, Mistral, and local Ollama.
-* **Lightweight:** No heavy server stacks required. Perfect for Raspberry Pi 5.
-
-**Installation & Setup**
-
-Clone the repository:
-1. git clone https://github.com/4rch0n-c0c0nu7/LLM-Token-Vault.git
-cd LLM-Token-Vault
-
-
-
+1. Clone the repository:
+   ```bash
+   git clone [https://github.com/4rch0n-c0c0nu7/vpn-dashboard.git](https://github.com/4rch0n-c0c0nu7/vpn-dashboard.git)
+   cd vpn-dashboard
