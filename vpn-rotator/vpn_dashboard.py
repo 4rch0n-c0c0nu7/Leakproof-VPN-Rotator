@@ -382,17 +382,22 @@ class VPNDashboard:
         self.safe_ui_update(lambda: self.lbl_ip.config(text=ip))
 
     def start_kill(self):
-        """Gracefully terminates WireGuard using wg-quick to restore routing tables."""
-        self.log("\n[!] SAFE KILL SWITCH ACTIVATED")
+        """Forcibly and cleanly terminates all VPN interfaces and restores default routing."""
+        self.log("\n[!] EMERGENCY KILL SWITCH ACTIVATED")
         
-        # Use wg-quick down to properly tear down routing and DNS rules
+        # 1. Take down wireguard interface properly
         subprocess.run(["sudo", "wg-quick", "down", "wg0"], stderr=subprocess.DEVNULL)
+        
+        # 2. Force delete the interface if it's lingering in the kernel
         subprocess.run(["sudo", "ip", "link", "delete", "dev", "wg0"], stderr=subprocess.DEVNULL)
+        
+        # 3. Force route table flush / restart network manager to reclaim local gateway
+        subprocess.run(["sudo", "systemctl", "restart", "NetworkManager"], stderr=subprocess.DEVNULL)
 
         if self.auto_active:
             self.toggle_auto()
 
-        self.log("[*] VPN tunnel dropped. Default gateway restored.")
+        self.log("[*] Kill switch executed. Network stack reset.")
         self.lbl_node.config(text="DISCONNECTED")
         
         for btn in self.node_buttons.values():
