@@ -5,11 +5,12 @@ import subprocess
 import threading
 import json
 import os
+import time
 
 HOME_DIR = "/home/dano"
 CONFIG_DIR = os.path.join(HOME_DIR, "vpn_configs")
 STATE_FILE = os.path.join(CONFIG_DIR, "rotator_state.json")
-ROTATOR_SCRIPT = os.path.join(HOME_DIR, "vpn_rotator.py")
+ROTATOR_SCRIPT = os.path.join(HOME_DIR, "vpn-rotator", "vpn_rotator.py")
 
 # --- 1990s WINDOWS SYSTEM PALETTE ---
 WIN_GRAY = "#C0C0C0"          # Standard Win95 Dialog Background
@@ -48,7 +49,6 @@ class VPNDashboard:
         self._start_clock_loop()
 
     def _build_ui(self):
-        # Top Title Bar Simulation Frame (Classic Win95 style header banner)
         title_bar = tk.Frame(self.root, bg=TITLE_BAR_BG, height=24)
         title_bar.pack(fill="x", padx=2, pady=2)
         tk.Label(
@@ -59,11 +59,9 @@ class VPNDashboard:
             font=FONT_TITLE
         ).pack(side="left", padx=4, pady=2)
 
-        # Main Content Container Frame with sunken bevel
         main_container = tk.Frame(self.root, bg=WIN_GRAY, bd=2, relief="sunken")
         main_container.pack(fill="both", expand=True, padx=6, pady=6)
 
-        # Telemetry Display Frame (LabelFrame with classic raised border)
         telemetry_frame = tk.LabelFrame(
             main_container, 
             text=" Active Telemetry Status ", 
@@ -83,7 +81,6 @@ class VPNDashboard:
         self.lbl_ip = tk.Label(telemetry_frame, text="Fetching...", bg=WIN_GRAY, fg="#000080", font=("MS Sans Serif", 9, "bold"))
         self.lbl_ip.grid(row=1, column=1, sticky="w", padx=10, pady=2)
 
-        # Autopilot Controls Frame
         control_frame = tk.LabelFrame(
             main_container, 
             text=" Autopilot & Timing Controls ", 
@@ -102,7 +99,6 @@ class VPNDashboard:
         tk.Label(control_frame, text="EXTEND", bg=WIN_GRAY, fg=TEXT_DARK, font=FONT_MAIN).grid(row=0, column=2, padx=8, pady=(0, 2))
         tk.Label(control_frame, text="ABORT", bg=WIN_GRAY, fg=TEXT_DARK, font=FONT_MAIN).grid(row=0, column=3, padx=8, pady=(0, 2))
 
-        # AUTO Toggle Button (Raised Win32 style button)
         self.btn_auto = tk.Button(
             control_frame, 
             text="AUTO: OFF", 
@@ -116,7 +112,6 @@ class VPNDashboard:
         )
         self.btn_auto.grid(row=1, column=0, padx=6)
 
-        # Live Countdown / Interval Switcher Button
         mins = self.interval_options[self.current_interval_idx]
         self.btn_interval = tk.Button(
             control_frame, 
@@ -131,7 +126,6 @@ class VPNDashboard:
         )
         self.btn_interval.grid(row=1, column=1, padx=6)
 
-        # +5 MINS Extension Override Button
         self.btn_add_time = tk.Button(
             control_frame, 
             text="+5 MINS", 
@@ -146,7 +140,6 @@ class VPNDashboard:
         )
         self.btn_add_time.grid(row=1, column=2, padx=6)
 
-        # Emergency Kill Switch Button
         self.btn_kill = tk.Button(
             control_frame, 
             text="KILL SWITCH", 
@@ -160,7 +153,6 @@ class VPNDashboard:
         )
         self.btn_kill.grid(row=1, column=3, padx=6)
 
-        # Manual Override Grid Frame
         self.manual_frame = tk.LabelFrame(
             main_container, 
             text=" Manual Override (Select Node) ", 
@@ -210,7 +202,6 @@ class VPNDashboard:
                     col_count = 0
                     row_count += 1
 
-        # Terminal Log Section Header
         log_header_frame = tk.Frame(main_container, bg=WIN_GRAY)
         log_header_frame.pack(fill="x", padx=10, pady=(6, 2))
 
@@ -235,7 +226,6 @@ class VPNDashboard:
         )
         self.btn_copy.pack(side="right")
 
-        # Classic White Editor-style Scrolled Terminal Box (Sunken border)
         term_wrapper = tk.Frame(main_container, bg=WIN_GRAY, bd=2, relief="sunken")
         term_wrapper.pack(fill="both", expand=True, padx=10, pady=(2, 10))
 
@@ -254,7 +244,6 @@ class VPNDashboard:
         self.term.config(state=tk.DISABLED)
 
     def _start_clock_loop(self):
-        """Ticks every 1000ms to calculate countdowns and warning states."""
         if self.auto_active:
             if self.is_rotating:
                 self.btn_interval.config(text="[ SYNCING ]", fg="blue")
@@ -264,16 +253,13 @@ class VPNDashboard:
                     mins, secs = divmod(self.remaining_seconds, 60)
                     
                     if self.remaining_seconds <= 60:
-                        time_str = f"⏱️ {mins:02d}:{secs:02d}"
                         alert_color = "red"
                     elif self.remaining_seconds <= 180:
-                        time_str = f"⏱️ {mins:02d}:{secs:02d}"
-                        alert_color = "#B8860B"  # Dark goldenrod/orange
+                        alert_color = "#B8860B"
                     else:
-                        time_str = f"⏱️ {mins:02d}:{secs:02d}"
                         alert_color = TEXT_DARK
 
-                    self.btn_interval.config(text=time_str, fg=alert_color)
+                    self.btn_interval.config(text=f"⏱️ {mins:02d}:{secs:02d}", fg=alert_color)
 
                 if self.remaining_seconds == 0:
                     self.btn_interval.config(text="[ ROTATING ]", fg="red")
@@ -285,14 +271,12 @@ class VPNDashboard:
         self.clock_job = self.root.after(1000, self._start_clock_loop)
 
     def add_time(self):
-        """Adds 300 seconds (5 mins) to the active countdown clock."""
         if self.auto_active:
             self.remaining_seconds += 300
             mins, secs = divmod(self.remaining_seconds, 60)
             self.log(f"[+] Added 5 minutes. Next rotation in: {mins}m {secs}s")
 
     def toggle_auto(self):
-        """Toggles automated interval rotation state and updates button availability."""
         self.auto_active = not self.auto_active
         if self.auto_active:
             mins = self.interval_options[self.current_interval_idx]
@@ -313,14 +297,12 @@ class VPNDashboard:
             self.log("\n[*] Autopilot DISENGAGED. Manual mode active.")
 
     def cycle_interval(self):
-        """Cycles through preset time intervals (only when AUTO is OFF)."""
         if not self.auto_active:
             self.current_interval_idx = (self.current_interval_idx + 1) % len(self.interval_options)
             mins = self.interval_options[self.current_interval_idx]
             self.btn_interval.config(text=f"⏱️ {mins}M")
 
     def start_rotation(self, target_config=None):
-        """Triggers sequential or direct target VPN rotation."""
         if target_config and self.auto_active:
             self.log("[!] Manual override selected. Disengaging Autopilot.")
             self.toggle_auto()
@@ -362,7 +344,6 @@ class VPNDashboard:
         self.safe_ui_update(lambda: self.btn_kill.config(state=tk.NORMAL))
 
     def refresh_telemetry(self):
-        """Reads persisted rotator state, highlights active node button, and fetches public IP."""
         active_config = None
         if os.path.exists(STATE_FILE):
             try:
@@ -401,25 +382,17 @@ class VPNDashboard:
         self.safe_ui_update(lambda: self.lbl_ip.config(text=ip))
 
     def start_kill(self):
-        """Terminates WireGuard/VPN interface immediately and restores local routing."""
-        self.log("\n[!] EMERGENCY KILL SWITCH ACTIVATED")
+        """Gracefully terminates WireGuard without shutting down network hardware."""
+        self.log("\n[!] SAFE KILL SWITCH ACTIVATED")
         
-        # 1. Bring down WireGuard and delete interface
-        subprocess.run(["sudo", "wg-quick", "down", "wg0"], stderr=subprocess.DEVNULL)
+        # Safely drop tunnel interface without touching network manager daemon
         subprocess.run(["sudo", "ip", "link", "delete", "dev", "wg0"], stderr=subprocess.DEVNULL)
-
-        # 2. Restart NetworkManager to restore default gateway routing and internet
-        self.log("[*] Restoring local network routing...")
-        subprocess.run(["sudo", "nmcli", "networking", "off"], stderr=subprocess.DEVNULL)
-        time.sleep(1)
-        subprocess.run(["sudo", "nmcli", "networking", "on"], stderr=subprocess.DEVNULL)
 
         if self.auto_active:
             self.toggle_auto()
 
-        self.log("[*] Network tunnel destroyed. Local routing restored.")
+        self.log("[*] VPN tunnel dropped. Default gateway preserved.")
         self.lbl_node.config(text="DISCONNECTED")
-        self.lbl_ip.config(text="OFFLINE")
         
         for btn in self.node_buttons.values():
             btn.config(bg=WIN_GRAY, relief="raised", font=FONT_MAIN)
@@ -427,7 +400,6 @@ class VPNDashboard:
         self.refresh_telemetry()
 
     def copy_logs(self):
-        """Copies all terminal text to the system clipboard with feedback."""
         logs = self.term.get("1.0", tk.END)
         self.root.clipboard_clear()
         self.root.clipboard_append(logs)
@@ -437,14 +409,12 @@ class VPNDashboard:
         self.root.after(2000, lambda: self.btn_copy.config(text="Copy Log"))
 
     def log(self, message):
-        """Appends a timestamped line to the scrolled terminal widget."""
         self.term.config(state=tk.NORMAL)
         self.term.insert(tk.END, message + "\n")
         self.term.see(tk.END)
         self.term.config(state=tk.DISABLED)
 
     def safe_ui_update(self, func, *args):
-        """Schedules thread-safe UI updates on Tkinter's main loop."""
         try:
             if self.root.winfo_exists():
                 self.root.after(0, func, *args)

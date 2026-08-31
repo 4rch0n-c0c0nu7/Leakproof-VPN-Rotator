@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 import os
 import sys
 import json
@@ -16,7 +15,7 @@ except ImportError:
     print("[!] ERROR: Could not import lumi_vault.py. Ensure it is in /home/dano/")
     sys.exit(1)
 
-CONFIG_DIR = os.path.join(HOME_DIR, "vpn_configs")
+CONFIG_DIR = "/home/dano/vpn_configs"
 STATE_FILE = os.path.join(CONFIG_DIR, "rotator_state.json")
 RAM_DISK_PATH = "/dev/shm/wg0.conf"
 
@@ -61,6 +60,7 @@ def main():
     print(f"[*] Current Public IP: {old_ip}")
 
     print("[*] Tearing down existing tunnels...")
+    subprocess.run(["sudo", "wg-quick", "down", RAM_DISK_PATH], stderr=subprocess.DEVNULL)
     subprocess.run(["sudo", "ip", "link", "delete", "dev", "wg0"], stderr=subprocess.DEVNULL)
     time.sleep(1.5) 
 
