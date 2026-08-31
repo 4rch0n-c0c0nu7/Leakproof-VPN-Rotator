@@ -30,6 +30,7 @@ FONT_TERM = ("Courier New", 9)
 class VPNDashboard:
     def __init__(self, root):
         self.root = root
+        self.root.protocol("WM_DELETE_WINDOW", self.on_close)
         self.root.title("Tactical VPN Telemetry & Rotator")
         self.root.geometry("640x700")
         self.root.configure(bg=WIN_GRAY)
@@ -426,6 +427,20 @@ class VPNDashboard:
                 self.root.after(0, func, *args)
         except Exception:
             pass
+
+    def on_close(self):
+        print("[*] Dashboard closing. Safely tearing down VPN interfaces...")
+        import subprocess
+        import os
+
+        # Cleanly drop the tunnel
+        subprocess.run(["sudo", "wg-quick", "down", "wg0"], stderr=subprocess.DEVNULL)
+        
+        # Rebuild the DNS map that WireGuard forgets to replace
+        subprocess.run(["sudo", "ln", "-sf", "/run/NetworkManager/resolv.conf", "/etc/resolv.conf"], stderr=subprocess.DEVNULL)
+
+        self.root.destroy()
+        os._exit(0)
 
 if __name__ == "__main__":
     root = tk.Tk()
