@@ -1,0 +1,159 @@
+#!/usr/bin/python3 -I
+"""
+vpnctl — the only thing the VPN dashboard runs as root (sudoers: NOPASSWD for this file only).
+
+  vpnctl up NAME      read a WireGuard config on stdin, bring wg0 up with it
+  vpnctl down         bring wg0 down cleanly (DNS restored by wg-quick/resolvconf)
+  vpnctl lock on|off  leak block: drop all non-tunnel internet traffic (real kill switch)
+  vpnctl status       JSON: tunnel, endpoint, handshake, lock, DNS
+  vpnctl netreset     restart NetworkManager (last-resort network repair)
+
+Root-owned, stdlib only, run with -I, so nothing in the user's home is ever executed as root.
+The live config (with the private key) is kept only in /run/vpnctl (RAM, root-only) while up,
+so `wg-quick down` can undo DNS and routes properly; it's deleted on down.
+"""
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+
+IFACE = "wg0"
+RUN_DIR = "/run/vpnctl"
+CONF = os.path.join(RUN_DIR, IFACE + ".conf")
+NAME_FILE = os.path.join(RUN_DIR, "name")
+TABLE = "vpnlock"
+WG_MARK = "0xca6c"  # wg-quick marks WireGuard's own UDP with fwmark 51820 when routing 0.0.0.0/0
+
+LOCK_RULES = f"""
+table inet {TABLE} {{
+  chain out {{
+    type filter hook output priority 0; policy drop;
+    oifname "lo" accept
+    oifname "{IFACE}" accept
+    oifname "tailscale0" accept
+    meta mark {WG_MARK} accept
+    meta mark & 0x00ff0000 == 0x00080000 accept
+    meta l4proto {{ tcp, udp }} th dport 53 drop
+    ip daddr {{ 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16, 224.0.0.0/4, 255.255.255.255 }} accept
+    ip6 daddr {{ fe80::/10, fc00::/7, ff00::/8 }} accept
+  }}
+}}
+"""
+
+
+def run(cmd, timeout=30, stdin=None):
+    return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, input=stdin)
+
+
+def die(msg, code=1):
+    print(json.dumps({"ok": False, "error": msg}))
+    sys.exit(code)
+
+
+def iface_up():
+    return run(["ip", "link", "show", IFACE]).returncode == 0
+
+
+def lock_on():
+    return run(["nft", "list", "table", "inet", TABLE]).returncode == 0
+
+
+def validate(conf):
+    if len(conf) > 8192:
+        die("config too large")
+    for line in conf.splitlines():
+        s = line.strip()
+        # Hooks would run arbitrary commands as root; templates never need them.
+        if re.match(r"(?i)^(PreUp|PostUp|PreDown|PostDown|SaveConfig)\s*=", s):
+            die(f"config option not allowed: {s.split('=')[0].strip()}")
+    if "[Interface]" not in conf or "[Peer]" not in conf or "VAULT_INJECT" in conf:
+        die("config incomplete (missing section or key not injected)")
+
+
+def down():
+    out = []
+    if os.path.exists(CONF):
+        r = run(["wg-quick", "down", CONF])
+        out.append(r.stderr.strip())
+    if iface_up():  # leftover without a config file: remove it, then let resolvconf forget it
+        run(["ip", "link", "delete", "dev", IFACE])
+        run(["resolvconf", "-d", f"tun.{IFACE}", "-f"])
+    for f in (CONF, NAME_FILE):
+        if os.path.exists(f):
+            os.remove(f)
+    return out
+
+
+def up(name):
+    if not re.fullmatch(r"[a-z0-9_]{1,32}", name):
+        die("bad config name")
+    conf = sys.stdin.read()
+    validate(conf)
+    down()
+    os.makedirs(RUN_DIR, mode=0o700, exist_ok=True)
+    os.chmod(RUN_DIR, 0o700)
+    fd = os.open(CONF, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f:
+        f.write(conf)
+    r = run(["wg-quick", "up", CONF], timeout=40)
+    if r.returncode != 0:
+        down()
+        die("wg-quick up failed: " + (r.stderr.strip().splitlines() or ["?"])[-1])
+    with open(NAME_FILE, "w") as f:
+        f.write(name)
+    print(json.dumps({"ok": True, "name": name}))
+
+
+def set_lock(on):
+    run(["nft", "delete", "table", "inet", TABLE])
+    if on:
+        r = run(["nft", "-f", "-"], stdin=LOCK_RULES)
+        if r.returncode != 0:
+            die("nft failed: " + r.stderr.strip()[-200:])
+    print(json.dumps({"ok": True, "lock": on}))
+
+
+def status():
+    st = {"ok": True, "up": iface_up(), "lock": lock_on(), "name": None,
+          "endpoint": None, "handshake_age": None, "rx": 0, "tx": 0}
+    if os.path.exists(NAME_FILE):
+        st["name"] = open(NAME_FILE).read().strip()
+    if st["up"]:
+        dump = run(["wg", "show", IFACE, "dump"]).stdout.splitlines()
+        if len(dump) > 1:
+            f = dump[1].split("\t")  # peer line: pubkey psk endpoint allowed-ips handshake rx tx keepalive
+            st["endpoint"] = f[2]
+            hs = int(f[4] or 0)
+            st["handshake_age"] = int(time.time()) - hs if hs else None
+            st["rx"], st["tx"] = int(f[5]), int(f[6])
+    try:
+        st["dns"] = re.findall(r"^nameserver\s+(\S+)", open("/etc/resolv.conf").read(), re.M)
+    except OSError:
+        st["dns"] = []
+    print(json.dumps(st))
+
+
+def main():
+    a = sys.argv[1:]
+    if os.geteuid() != 0:
+        die("must run as root (sudo)")
+    if a[:1] == ["up"] and len(a) == 2:
+        up(a[1])
+    elif a == ["down"]:
+        down()
+        print(json.dumps({"ok": True}))
+    elif a[:1] == ["lock"] and len(a) == 2 and a[1] in ("on", "off"):
+        set_lock(a[1] == "on")
+    elif a == ["status"]:
+        status()
+    elif a == ["netreset"]:
+        run(["systemctl", "restart", "NetworkManager"], timeout=60)
+        print(json.dumps({"ok": True}))
+    else:
+        die("usage: vpnctl up NAME | down | lock on|off | status | netreset", 2)
+
+
+if __name__ == "__main__":
+    main()

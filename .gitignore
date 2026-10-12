@@ -1,0 +1,6 @@
+# Never publish logs or state: they can contain real public IP addresses.
+*.log
+*state*.json
+*.conf
+lumi_keys.json
+__pycache__/

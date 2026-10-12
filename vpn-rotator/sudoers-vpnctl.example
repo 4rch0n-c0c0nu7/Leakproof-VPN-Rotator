@@ -1,0 +1,1 @@
+dano ALL=(root) NOPASSWD: /usr/local/sbin/vpnctl
