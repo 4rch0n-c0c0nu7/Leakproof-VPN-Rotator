@@ -10,9 +10,10 @@ A lightweight, retro-styled Python control center for WireGuard VPNs on cyberdec
 * **Leak-free rotation:** autopilot (5/15/30/60 min) or one-click server override, with the block held during the switch.
 * **Live, honest telemetry:** tunnel state and last WireGuard handshake come from the kernel (`wg show`), not a saved file. Public IPv4 *and* IPv6 are checked by route: *via tunnel ✓*, *blocked*, or *⚠ LEAK*.
 * **IPv6 leak fix:** configs route `::/0` into the tunnel (servers without IPv6 simply block it).
+* **DNS stays in the tunnel:** on connect, `/etc/resolv.conf` is pointed at the VPN's own resolver (the config's `DNS =`); your original is restored on disconnect. So lookups use the VPN's DNS instead of silently falling back to a public resolver — and the original is backed up persistently, so a crash can't strand you on an unreachable tunnel resolver.
 * **Keys never on disk in plaintext:** private keys live in the hardware-locked vault from [LLM-Token-Vault](https://github.com/4rch0n-c0c0nu7/LLM-Token-Vault); configs are templates with `PrivateKey = VAULT_INJECT`, and the live config is piped straight to the root helper (kept only in root-only RAM while connected).
 * **Least privilege:** the GUI runs as your user. The only root step is `vpnctl`, a small root-owned helper that sudo allows by itself — no `sudo python3 <user-writable script>`. It refuses configs containing `PostUp`/`PreUp`-style hooks.
-* **Crash-safe:** if the app is hard-killed while connected (so the kill switch is left on with no tunnel), the next launch detects the orphaned block and lifts it automatically — a crash can't leave you silently offline.
+* **Crash-safe:** if the app is hard-killed while connected, a left-over kill switch *or* DNS override is detected and reverted on the next launch — a crash can't leave you silently offline or mis-resolving.
 
 ## 🛠️ Components (`vpn-rotator/`)
 

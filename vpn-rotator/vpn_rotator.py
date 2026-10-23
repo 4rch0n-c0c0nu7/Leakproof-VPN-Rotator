@@ -192,14 +192,14 @@ def disconnect(log=None):
 
 
 def clear_stale_lock(log=None):
-    """Crash recovery: after an unclean shutdown the kill switch can be left ON with no
-    tunnel up, silently blocking all non-tunnel traffic (including DNS). Detect that and
-    lift it so the machine is never left offline. Returns True if a stale lock was cleared."""
+    """Crash recovery: after an unclean shutdown the kill switch and/or the tunnel's DNS
+    override can be left in place with no tunnel up, silently breaking traffic or DNS.
+    Detect that and clean it up so the machine is never left offline or mis-resolving."""
     st = status()
-    if st.get("ok") and st.get("lock") and not st.get("up"):
-        r = vpnctl("lock", "off")
-        _say(log, "[*] Cleared a stale leak block left by an unclean shutdown — internet restored."
-             if r.get("ok") else f"[!] Stale leak block found but couldn't lift it: {r.get('error')}")
+    if st.get("ok") and not st.get("up") and (st.get("lock") or st.get("dns_managed")):
+        vpnctl("down")          # restores the original resolv.conf
+        vpnctl("lock", "off")   # lifts the kill switch
+        _say(log, "[*] Cleared a stale leak block / VPN DNS override from an unclean shutdown — connectivity restored.")
         return True
     return False
 

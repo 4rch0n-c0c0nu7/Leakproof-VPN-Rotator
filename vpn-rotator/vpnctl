@@ -25,6 +25,9 @@ CONF = os.path.join(RUN_DIR, IFACE + ".conf")
 NAME_FILE = os.path.join(RUN_DIR, "name")
 TABLE = "vpnlock"
 WG_MARK = "0xca6c"  # wg-quick marks WireGuard's own UDP with fwmark 51820 when routing 0.0.0.0/0
+RESOLV = "/etc/resolv.conf"
+RESOLV_BAK = "/etc/vpnctl.resolv.bak"      # persistent, so it survives a crash/reboot
+RESOLV_LINK = "/etc/vpnctl.resolv.islink"  # marker: the original resolv.conf was a symlink
 
 LOCK_RULES = f"""
 table inet {TABLE} {{
@@ -72,6 +75,65 @@ def validate(conf):
         die("config incomplete (missing section or key not injected)")
 
 
+def _parse_dns(conf):
+    for line in conf.splitlines():
+        m = re.match(r"(?i)\s*dns\s*=\s*(.+)", line)
+        if m:
+            parts = [p.strip() for p in m.group(1).split(",")]
+            return [p for p in parts if re.match(r"^[0-9A-Fa-f:.]+$", p)]
+    return []
+
+
+def _dns_managed():
+    return os.path.exists(RESOLV_BAK) or os.path.exists(RESOLV_LINK)
+
+
+def _dns_takeover(conf):
+    """Point /etc/resolv.conf at the tunnel's DNS so lookups use the VPN resolver, not
+    whatever public resolver was set. The original is backed up (persistently) for restore."""
+    servers = _parse_dns(conf)
+    if not servers:
+        return
+    try:
+        if not _dns_managed():  # keep the ORIGINAL, never back up a tunnel resolv.conf
+            if os.path.islink(RESOLV):
+                with open(RESOLV_LINK, "w") as f:
+                    f.write(os.readlink(RESOLV))
+            elif os.path.exists(RESOLV):
+                with open(RESOLV, "rb") as s, open(RESOLV_BAK, "wb") as d:
+                    d.write(s.read())
+            else:
+                open(RESOLV_BAK, "wb").close()
+        body = "# vpnctl: VPN tunnel DNS (your original is restored on disconnect)\n" + \
+               "".join("nameserver %s\n" % s for s in servers)
+        tmp = RESOLV + ".vpnctl"
+        with open(tmp, "w") as f:
+            f.write(body)
+        os.replace(tmp, RESOLV)
+    except Exception:
+        pass
+
+
+def _dns_restore():
+    """Undo _dns_takeover: put back the original resolv.conf (symlink or file)."""
+    tmp = RESOLV + ".vpnctl"
+    try:
+        if os.path.exists(RESOLV_LINK):
+            target = open(RESOLV_LINK).read().strip()
+            if os.path.lexists(tmp):
+                os.remove(tmp)
+            os.symlink(target, tmp)
+            os.replace(tmp, RESOLV)
+            os.remove(RESOLV_LINK)
+        elif os.path.exists(RESOLV_BAK):
+            with open(RESOLV_BAK, "rb") as s, open(tmp, "wb") as d:
+                d.write(s.read())
+            os.replace(tmp, RESOLV)
+            os.remove(RESOLV_BAK)
+    except Exception:
+        pass
+
+
 def down():
     out = []
     if os.path.exists(CONF):
@@ -83,6 +145,7 @@ def down():
     for f in (CONF, NAME_FILE):
         if os.path.exists(f):
             os.remove(f)
+    _dns_restore()  # put the original resolv.conf back
     return out
 
 
@@ -103,6 +166,7 @@ def up(name):
         die("wg-quick up failed: " + (r.stderr.strip().splitlines() or ["?"])[-1])
     with open(NAME_FILE, "w") as f:
         f.write(name)
+    _dns_takeover(conf)  # use the tunnel's DNS resolver while connected
     print(json.dumps({"ok": True, "name": name}))
 
 
@@ -116,8 +180,8 @@ def set_lock(on):
 
 
 def status():
-    st = {"ok": True, "up": iface_up(), "lock": lock_on(), "name": None,
-          "endpoint": None, "handshake_age": None, "rx": 0, "tx": 0}
+    st = {"ok": True, "up": iface_up(), "lock": lock_on(), "dns_managed": _dns_managed(),
+          "name": None, "endpoint": None, "handshake_age": None, "rx": 0, "tx": 0}
     if os.path.exists(NAME_FILE):
         st["name"] = open(NAME_FILE).read().strip()
     if st["up"]:
