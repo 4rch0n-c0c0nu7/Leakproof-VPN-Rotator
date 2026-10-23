@@ -29,6 +29,12 @@ sed "s/^dano /$USER /" sudoers-vpnctl.example > /tmp/020_vpnctl && sudo visudo -
   && sudo install -o root -g root -m 0440 /tmp/020_vpnctl /etc/sudoers.d/020_vpnctl
 ```
 
+The dashboard loads your keys through the encrypted vault from [LLM-Token-Vault](https://github.com/4rch0n-c0c0nu7/LLM-Token-Vault). Clone it to `~/LLM-Token-Vault` so `lumi_vault.py` is importable — `vpn_rotator.py` loads it from there, keeping the vault code in one repo instead of copied into this one:
+
+```bash
+git clone https://github.com/4rch0n-c0c0nu7/LLM-Token-Vault ~/LLM-Token-Vault
+```
+
 1. Put WireGuard templates in `~/vpn_configs/NAME.conf` with `PrivateKey = VAULT_INJECT`, `AllowedIPs = 0.0.0.0/0, ::/0`, and your provider's `DNS =` (Proton: `10.2.0.1`).
 2. Store each private key in the vault as `VPN_KEY_NAME` (e.g. `VPN_KEY_proton_us`).
 3. Run `python3 vpn_dashboard.py`.
