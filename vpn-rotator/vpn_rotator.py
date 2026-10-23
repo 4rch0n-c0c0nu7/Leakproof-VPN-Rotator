@@ -191,6 +191,19 @@ def disconnect(log=None):
     return ok
 
 
+def clear_stale_lock(log=None):
+    """Crash recovery: after an unclean shutdown the kill switch can be left ON with no
+    tunnel up, silently blocking all non-tunnel traffic (including DNS). Detect that and
+    lift it so the machine is never left offline. Returns True if a stale lock was cleared."""
+    st = status()
+    if st.get("ok") and st.get("lock") and not st.get("up"):
+        r = vpnctl("lock", "off")
+        _say(log, "[*] Cleared a stale leak block left by an unclean shutdown — internet restored."
+             if r.get("ok") else f"[!] Stale leak block found but couldn't lift it: {r.get('error')}")
+        return True
+    return False
+
+
 def main():
     a = sys.argv[1:]
     if a == ["--down"]:

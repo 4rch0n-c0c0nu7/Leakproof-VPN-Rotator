@@ -168,6 +168,7 @@ class VPNDashboard:
                                  highlightthickness=0, wrap="word")
         self.term.pack(fill="both", expand=True, padx=2, pady=2)
         self.log("Win32 Tactical Subsystem v2 initialized. Reading live tunnel state…")
+        rot.clear_stale_lock(log=self.log)  # crash recovery: lift an orphaned kill switch
 
     # ---------- status ----------
 

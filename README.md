@@ -12,6 +12,7 @@ A lightweight, retro-styled Python control center for WireGuard VPNs on cyberdec
 * **IPv6 leak fix:** configs route `::/0` into the tunnel (servers without IPv6 simply block it).
 * **Keys never on disk in plaintext:** private keys live in the hardware-locked vault from [LLM-Token-Vault](https://github.com/4rch0n-c0c0nu7/LLM-Token-Vault); configs are templates with `PrivateKey = VAULT_INJECT`, and the live config is piped straight to the root helper (kept only in root-only RAM while connected).
 * **Least privilege:** the GUI runs as your user. The only root step is `vpnctl`, a small root-owned helper that sudo allows by itself — no `sudo python3 <user-writable script>`. It refuses configs containing `PostUp`/`PreUp`-style hooks.
+* **Crash-safe:** if the app is hard-killed while connected (so the kill switch is left on with no tunnel), the next launch detects the orphaned block and lifts it automatically — a crash can't leave you silently offline.
 
 ## 🛠️ Components (`vpn-rotator/`)
 
