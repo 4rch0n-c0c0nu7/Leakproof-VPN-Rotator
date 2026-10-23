@@ -1,6 +1,6 @@
 <img width="600" alt="VPN dashboard v2" src="docs/dashboard-v2.png" />
 
-# 🪟 90s Windows-Style VPN Dashboard & Rotator
+# 🪟 Leakproof VPN Rotator
 
 A lightweight, retro-styled Python control center for WireGuard VPNs on cyberdecks and Linux field units (built on a Raspberry Pi 5 with ProtonVPN configs). Classic Win95 look; modern leak protection underneath.
 
@@ -23,7 +23,7 @@ A lightweight, retro-styled Python control center for WireGuard VPNs on cyberdec
 ## ⚙️ Setup
 
 ```bash
-git clone https://github.com/4rch0n-c0c0nu7/VPN-dashboard.git && cd VPN-dashboard/vpn-rotator
+git clone https://github.com/4rch0n-c0c0nu7/Leakproof-VPN-Rotator.git && cd Leakproof-VPN-Rotator/vpn-rotator
 sudo install -o root -g root -m 0755 vpnctl /usr/local/sbin/vpnctl
 sed "s/^dano /$USER /" sudoers-vpnctl.example > /tmp/020_vpnctl && sudo visudo -cf /tmp/020_vpnctl \
   && sudo install -o root -g root -m 0440 /tmp/020_vpnctl /etc/sudoers.d/020_vpnctl
