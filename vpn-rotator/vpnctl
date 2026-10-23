@@ -3,18 +3,21 @@
 vpnctl — the only thing the VPN dashboard runs as root (sudoers: NOPASSWD for this file only).
 
   vpnctl up NAME      read a WireGuard config on stdin, bring wg0 up with it
-  vpnctl down         bring wg0 down cleanly (DNS restored by wg-quick/resolvconf)
+  vpnctl down         bring wg0 down cleanly (vpnctl restores the original DNS)
   vpnctl lock on|off  leak block: drop all non-tunnel internet traffic (real kill switch)
   vpnctl status       JSON: tunnel, endpoint, handshake, lock, DNS
   vpnctl netreset     restart NetworkManager (last-resort network repair)
 
 Root-owned, stdlib only, run with -I, so nothing in the user's home is ever executed as root.
-The live config (with the private key) is kept only in /run/vpnctl (RAM, root-only) while up,
-so `wg-quick down` can undo DNS and routes properly; it's deleted on down.
+The live config (with the private key) is kept only in /run/vpnctl (RAM, root-only) while up;
+it's deleted on down. vpnctl manages DNS itself -- it points /etc/resolv.conf at the tunnel's
+resolver while connected and restores the original on down -- so it needs no resolvconf and
+works whether the host uses resolvconf, systemd-resolved, or a plain static /etc/resolv.conf.
 """
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -85,6 +88,14 @@ def _parse_dns(conf):
     return []
 
 
+def _strip_dns(conf):
+    """A copy of the config with DNS= lines removed, so wg-quick never needs resolvconf
+    (vpnctl sets DNS itself). This is what makes it portable across resolvconf and
+    systemd-resolved hosts."""
+    keep = [l for l in conf.splitlines() if not re.match(r"(?i)\s*dns\s*=", l)]
+    return "\n".join(keep) + "\n"
+
+
 def _dns_managed():
     return os.path.exists(RESOLV_BAK) or os.path.exists(RESOLV_LINK)
 
@@ -127,8 +138,9 @@ def _dns_takeover(conf):
         with open(tmp, "w") as f:
             f.write(body)
         os.replace(tmp, RESOLV)
-        if os.path.exists(RESOLV_IMMUT):
-            _set_immutable(RESOLV, True)  # keep the same locking the user had
+        # Lock while connected so nothing (NetworkManager / systemd-resolved) can revert the
+        # tunnel DNS mid-session and leak. Restored to its original state on disconnect.
+        _set_immutable(RESOLV, True)
     except Exception:
         pass
 
@@ -166,9 +178,10 @@ def down():
     if os.path.exists(CONF):
         r = run(["wg-quick", "down", CONF])
         out.append(r.stderr.strip())
-    if iface_up():  # leftover without a config file: remove it, then let resolvconf forget it
+    if iface_up():  # leftover without a config file: remove it
         run(["ip", "link", "delete", "dev", IFACE])
-        run(["resolvconf", "-d", f"tun.{IFACE}", "-f"])
+        if shutil.which("resolvconf"):  # best-effort; vpnctl manages DNS itself
+            run(["resolvconf", "-d", f"tun.{IFACE}", "-f"])
     for f in (CONF, NAME_FILE):
         if os.path.exists(f):
             os.remove(f)
@@ -186,7 +199,7 @@ def up(name):
     os.chmod(RUN_DIR, 0o700)
     fd = os.open(CONF, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w") as f:
-        f.write(conf)
+        f.write(_strip_dns(conf))  # wg-quick gets a DNS-free config -> never needs resolvconf
     r = run(["wg-quick", "up", CONF], timeout=40)
     if r.returncode != 0:
         down()
